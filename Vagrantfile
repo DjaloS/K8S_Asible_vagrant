@@ -1,80 +1,38 @@
-# ####################################################################
-# ################### CONFIGURATION VARIABLES ########################
-# ####################################################################
-IMAGE_NAME = "bento/ubuntu-18.04"   # Image to use
-MEM = 2048                          # Amount of RAM
-CPU = 2                             # Number of processors (Minimum value of 2 otherwise it will not work)
-MASTER_NAME="master"                # Master node name
-WORKER_NBR = 1                      # Number of workers node
-NODE_NETWORK_BASE = "192.168.50"    # First three octets of the IP address that will be assign to all type of nodes
-POD_NETWORK = "192.168.100.0/16"    # Private network for inter-pod communication
-
-
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
 
 Vagrant.configure("2") do |config|
-    config.ssh.insert_key = false
-
-    # RAM and CPU config
-    config.vm.provider "virtualbox" do |v|
-        v.memory = MEM
-        v.cpus = CPU
+  config.vm.define "master" do |master|
+    master.vm.box = "geerlingguy/centos7"
+    master.vm.network "private_network", type: "static", ip: "192.168.56.10"
+    master.vm.hostname = "master"
+    master.vm.provider "virtualbox" do |v|
+      v.name = "master"
+      v.memory = 4096
+      v.cpus = 2
     end
-
-    # Master node config
-    config.vm.define MASTER_NAME do |master|
-        
-        # Hostname and network config
-        master.vm.box = IMAGE_NAME
-        master.vm.network "private_network", ip: "#{NODE_NETWORK_BASE}.10"
-        master.vm.hostname = MASTER_NAME
-
-        # Ansible role setting
-        master.vm.provision "ansible" do |ansible|
-            
-            # Ansbile role that will be launched
-            ansible.playbook = "roles/main.yml"
-
-            # Groups in Ansible inventory
-            ansible.groups = {
-                "masters" => ["#{MASTER_NAME}"],
-                "workers" => ["worker-[1:#{WORKER_NBR}]"]
-            }
-
-            # Overload Anqible variables
-            ansible.extra_vars = {
-                node_ip: "#{NODE_NETWORK_BASE}.10",
-                node_name: "master",
-                pod_network: "#{POD_NETWORK}"
-            }
-        end
+    master.vm.provision :shell do |shell|
+      shell.path = "install_kubernetes.sh"
+      shell.args = ["master", "192.168.56.10"]
     end
-
-    # Worker node config
-    (1..WORKER_NBR).each do |i|
-        config.vm.define "worker-#{i}" do |worker|
-
-            # Hostname and network config
-            worker.vm.box = IMAGE_NAME
-            worker.vm.network "private_network", ip: "#{NODE_NETWORK_BASE}.#{i + 10}"
-            worker.vm.hostname = "worker-#{i}"
-
-            # Ansible role setting
-            worker.vm.provision "ansible" do |ansible|
-
-                # Ansbile role that will be launched
-                ansible.playbook = "roles/main.yml"
-
-                # Groups in Ansible inventory
-                ansible.groups = {
-                    "masters" => ["#{MASTER_NAME}"],
-                    "workers" => ["worker-[1:#{WORKER_NBR}]"]
-                }
-
-                # Overload Anqible variables
-                ansible.extra_vars = {
-                    node_ip: "#{NODE_NETWORK_BASE}.#{i + 10}"
-                }
-            end
-        end
+  end
+  workers=2
+  ram_worker=2048
+  cpu_worker=2
+  (1..workers).each do |i|
+    config.vm.define "worker#{i}" do |worker|
+      worker.vm.box = "geerlingguy/centos7"
+      worker.vm.network "private_network", type: "static", ip: "192.168.56.10#{i}"
+      worker.vm.hostname = "worker#{i}"
+      worker.vm.provider "virtualbox" do |v|
+        v.name = "worker#{i}"
+        v.memory = ram_worker
+        v.cpus = cpu_worker
+      end
+      worker.vm.provision :shell do |shell|
+        shell.path = "install_kubernetes.sh"
+        shell.args = ["node", "192.168.99.10"]
+      end
     end
+  end
 end
